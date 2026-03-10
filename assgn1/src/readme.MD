@@ -4,6 +4,9 @@ This project implements video compression by using 256 arithmetic coding context
 
 
 **Results**
+
 Target Compression Rate: 2.5
+
 Achieved Compression Rate: 2.74
+
 *Note: These results are for bourne.mp4 file only.*
