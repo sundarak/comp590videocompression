@@ -106,7 +106,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut enc = Encoder::new();
 
     // Set up arithmetic coding context(s)
-    let mut pixel_difference_pdf = VectorCountSymbolModel::new((0..=255).collect());
+    // Made single model of contexts into a vector of 256 models
+    let mut pixel_difference_pdf: Vec<VectorCountSymbolModel<i32>> = (0..256)
+    .map(|_| VectorCountSymbolModel::new((0..=255).collect()))
+    .collect();
 
     // Process frames
     for frame in iter.filter_frames() {
@@ -131,10 +134,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         + 256)
                         % 256;
 
-                    enc.encode(&pixel_difference, &pixel_difference_pdf, &mut bw);
+                    let ctx_idx = prior_frame[pixel_index] as usize;
+                    let model = &mut pixel_difference_pdf[ctx_idx];
+
+                    enc.encode(&pixel_difference, model, &mut bw);
 
                     // Update context
-                    pixel_difference_pdf.incr_count(&pixel_difference);
+                    model.incr_count(&pixel_difference);
                 }
             }
 
@@ -178,7 +184,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let mut dec = Decoder::new();
 
-        let mut pixel_difference_pdf = VectorCountSymbolModel::new((0..=255).collect());
+        let mut dec_contexts: Vec<VectorCountSymbolModel<i32>> = (0..256)
+            .map(|_| VectorCountSymbolModel::new((0..=255).collect()))
+            .collect();
+
+    
 
         // Set up initial prior frame as uniform medium gray
         let mut prior_frame = vec![128 as u8; (width * height) as usize];
@@ -196,8 +206,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 for r in 0..height {
                     for c in 0..width {
                         let pixel_index = (r * width + c) as usize;
-                        let decoded_pixel_difference = dec.decode(&pixel_difference_pdf, &mut br).to_owned();
-                        pixel_difference_pdf.incr_count(&decoded_pixel_difference);
+
+                        let ctx_idx = prior_frame[pixel_index] as usize;
+                        let model = &mut dec_contexts[ctx_idx];
+
+                        let decoded_pixel_difference = dec.decode(model, &mut br).to_owned();
+                        model.incr_count(&decoded_pixel_difference);
 
                         let pixel_value = (prior_frame[pixel_index] as i32 + decoded_pixel_difference) % 256;
 
